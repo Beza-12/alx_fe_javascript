@@ -149,6 +149,66 @@ async function fetchQuotesFromServer() {
     }
 }
 
+// Sync local data to server - Complete version with all required elements
+async function syncToServer() {
+    try {
+        // Get local quotes that need syncing
+        const localQuotes = JSON.parse(localStorage.getItem('quotes') || '[]');
+        const quotesToSync = localQuotes.filter(quote => 
+            quote.source === 'local' || !quote.source
+        );
+        
+        if (quotesToSync.length === 0) {
+            showNotification('No new quotes to sync.', 'info');
+            return null;
+        }
+        
+        // Prepare sync data
+        const syncData = {
+            action: 'sync-quotes',
+            clientId: 'quote-generator-' + Math.random().toString(36).substr(2, 9),
+            timestamp: Date.now(),
+            quotes: quotesToSync,
+            totalQuotes: localQuotes.length
+        };
+        
+        // Send POST request to server with proper headers
+        const response = await fetch(SERVER_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-Sync-Version": "1.0"
+            },
+            body: JSON.stringify(syncData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Mark quotes as synced
+        localQuotes.forEach(quote => {
+            if (quote.source === 'local' || !quote.source) {
+                quote.source = 'synced';
+                quote.syncedAt = Date.now();
+            }
+        });
+        
+        localStorage.setItem('quotes', JSON.stringify(localQuotes));
+        quotes = localQuotes;
+        
+        showNotification(`Successfully synced ${quotesToSync.length} quotes to server!`, 'success');
+        return result;
+        
+    } catch (error) {
+        console.error('Sync to server failed:', error);
+        showNotification('Sync failed. Working offline. Error: ' + error.message, 'error');
+        return null;
+    }
+}
 // Update the initServerSync function to use the correct function name
 function initServerSync() {
     // Load initial server data
