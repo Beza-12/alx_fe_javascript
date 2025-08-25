@@ -1,13 +1,19 @@
+<<<<<<< HEAD
 // Mock server URL (JSONPlaceholder simulation)
 const SERVER_URL = "https://jsonplaceholder.typicode.com/posts";
 
 // Load quotes from localStorage or default
 let quotes = JSON.parse(localStorage.getItem("quotes")) || [
+=======
+// Our list of quotes
+const quotes = [
+>>>>>>> 1c5fedba04316f912417bbb0cbe512f1d93ff581
   { text: "Believe in yourself!", category: "Motivation" },
   { text: "Stay curious.", category: "Learning" },
   { text: "Dream big.", category: "Inspiration" }
 ];
 
+<<<<<<< HEAD
 // Save quotes to localStorage
 function saveQuotes() {
   localStorage.setItem("quotes", JSON.stringify(quotes));
@@ -66,16 +72,41 @@ function createAddQuoteForm() {
     saveQuotes();
     sendQuoteToServer(newQuote); // sync to server
 
+=======
+// Show a random quote
+function showRandomQuote() {
+  const randomIndex = Math.floor(Math.random() * quotes.length);
+  const quote = quotes[randomIndex];
+  const quoteDiv = document.getElementById("quoteDisplay");
+
+  quoteDiv.innerHTML = `<p>"${quote.text}"</p><small>— ${quote.category}</small>`;
+}
+
+// Add a new quote from the input fields
+function addQuote() {
+  const quoteText = document.getElementById("newQuoteText").value;
+  const quoteCategory = document.getElementById("newQuoteCategory").value;
+
+  if (quoteText && quoteCategory) {
+    // Add new quote to the array
+    quotes.push({ text: quoteText, category: quoteCategory });
+
+    // Clear the inputs
+>>>>>>> 1c5fedba04316f912417bbb0cbe512f1d93ff581
     document.getElementById("newQuoteText").value = "";
     document.getElementById("newQuoteCategory").value = "";
 
     alert("Quote added successfully!");
+<<<<<<< HEAD
     populateCategories();
+=======
+>>>>>>> 1c5fedba04316f912417bbb0cbe512f1d93ff581
   } else {
     alert("Please fill in both fields.");
   }
 }
 
+<<<<<<< HEAD
 // Export quotes as JSON
 function exportToJsonFile() {
   const dataStr = JSON.stringify(quotes, null, 2);
@@ -176,4 +207,7 @@ window.onload = () => {
 };
 
 // Event listeners
+=======
+// Make the button work
+>>>>>>> 1c5fedba04316f912417bbb0cbe512f1d93ff581
 document.getElementById("newQuote").addEventListener("click", showRandomQuote);
