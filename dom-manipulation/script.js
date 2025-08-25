@@ -150,7 +150,7 @@ async function fetchQuotesFromServer() {
 }
 
 // Sync local data to server - Complete version with all required elements
-async function syncToServer() {
+async function syncQuotes() {
     try {
         // Get local quotes that need syncing
         const localQuotes = JSON.parse(localStorage.getItem('quotes') || '[]');
