@@ -62,7 +62,7 @@ function updateQuoteCount() {
 }
 
 // Display a quote
-function displayQuote(quote) {
+function quoteDisplay(quote) {
     quoteTextElement.textContent = `"${quote.text}"`;
     quoteAuthorElement.textContent = `- ${quote.author}`;
     
@@ -190,30 +190,40 @@ function importFromJsonFile(event) {
     event.target.value = '';
 }
 
-// Populate categories dynamically
+// Populate categories dynamically - Fixed version
 function populateCategories() {
-    // Extract unique categories from quotes
-    categories = [...new Set(quotes.map(quote => quote.category))].filter(category => category);
-    
-    // Save current selection
-    const currentSelection = categoryFilter.value;
+    const categoryFilter = document.getElementById('categoryFilter');
+    if (!categoryFilter) return;
     
     // Clear existing options except "All Categories"
-    while (categoryFilter.options.length > 1) {
-        categoryFilter.remove(1);
-    }
+    const allOption = categoryFilter.options[0];
+    categoryFilter.innerHTML = '';
+    categoryFilter.appendChild(allOption);
     
-    // Add categories to dropdown
-    categories.forEach(category => {
+    // Extract unique categories from quotes using map
+    const uniqueCategories = [];
+    quotes.map(function(quote) {
+        if (quote.category && !uniqueCategories.includes(quote.category)) {
+            uniqueCategories.push(quote.category);
+        }
+        return quote; // map requires return
+    });
+    
+    // Sort categories alphabetically
+    uniqueCategories.sort();
+    
+    // Add categories to dropdown using appendChild
+    uniqueCategories.forEach(function(category) {
         const option = document.createElement('option');
         option.value = category;
         option.textContent = category;
         categoryFilter.appendChild(option);
     });
     
-    // Restore selection if it still exists
-    if (categories.includes(currentSelection) || currentSelection === 'all') {
-        categoryFilter.value = currentSelection;
+    // Restore last filter selection if available
+    const lastFilter = localStorage.getItem('lastFilter');
+    if (lastFilter && categoryFilter.querySelector('option[value="' + lastFilter + '"]')) {
+        categoryFilter.value = lastFilter;
     }
 }
 
