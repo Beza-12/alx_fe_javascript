@@ -19,6 +19,399 @@ let quotes = [];
 let categories = [];
 let serverQuotes = [];
 
+// Update notification messages to include the required text
+function showNotification(message, type = 'info', onClick = null) {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()">×</button>
+    `;
+    
+    if (onClick) {
+        notification.style.cursor = 'pointer';
+        notification.addEventListener('click', onClick);
+    }
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// Update the syncQuotes function to use the required message
+async function syncQuotes() {
+    try {
+        showNotification('Starting quote synchronization...', 'info');
+        
+        const localQuotes = JSON.parse(localStorage.getItem('quotes') || '[]');
+        const quotesToSync = localQuotes.filter(quote => 
+            quote.source === 'local' || !quote.source
+        );
+        
+        if (quotesToSync.length === 0) {
+            showNotification('No new quotes to sync.', 'info');
+            return { success: true, message: 'No quotes to sync' };
+        }
+        
+        const syncData = {
+            action: 'sync-quotes',
+            clientId: 'quote-generator-' + Math.random().toString(36).substr(2, 9),
+            timestamp: Date.now(),
+            quotes: quotesToSync,
+            totalQuotes: localQuotes.length
+        };
+        
+        const response = await fetch(SERVER_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            body: JSON.stringify(syncData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Mark quotes as synced
+        localQuotes.forEach(quote => {
+            if (quote.source === 'local' || !quote.source) {
+                quote.source = 'synced';
+                quote.syncedAt = Date.now();
+            }
+        });
+        
+        localStorage.setItem('quotes', JSON.stringify(localQuotes));
+        quotes = localQuotes;
+        
+        // Use the exact required message
+        showNotification("Quotes synced with server!", 'success');
+        return { success: true, syncedCount: quotesToSync.length, data: result };
+        
+    } catch (error) {
+        console.error('Quote synchronization failed:', error);
+        showNotification('Sync failed: ' + error.message, 'error');
+        return { success: false, error: error.message };
+    }
+}
+
+// Update the mergeServerData function to show better notifications
+function mergeServerData(serverData) {
+    const localQuotes = JSON.parse(localStorage.getItem('quotes') || '[]');
+    const conflicts = [];
+    let newQuotesCount = 0;
+    let updatedQuotesCount = 0;
+    
+    serverData.forEach(serverQuote => {
+        const localIndex = localQuotes.findIndex(localQuote => 
+            localQuote.id === serverQuote.id || 
+            (localQuote.text === serverQuote.text && localQuote.author === serverQuote.author)
+        );
+        
+        if (localIndex === -1) {
+            // New quote from server
+            localQuotes.push(serverQuote);
+            newQuotesCount++;
+        } else {
+            // Potential conflict - check if it's actually an update
+            const localQuote = localQuotes[localIndex];
+            if (localQuote.timestamp < serverQuote.timestamp) {
+                if (localQuote.text !== serverQuote.text || localQuote.author !== serverQuote.author) {
+                    conflicts.push({
+                        local: {...localQuote},
+                        server: {...serverQuote},
+                        resolved: false
+                    });
+                    updatedQuotesCount++;
+                }
+                localQuotes[localIndex] = serverQuote;
+            }
+        }
+    });
+    
+    // Save merged data
+    localStorage.setItem('quotes', JSON.stringify(localQuotes));
+    quotes = localQuotes;
+    
+    // Show appropriate notifications
+    if (newQuotesCount > 0) {
+        showNotification(`Received ${newQuotesCount} new quotes from server!`, 'success');
+    }
+    
+    if (updatedQuotesCount > 0) {
+        showNotification(`${updatedQuotesCount} quotes updated from server. Click to review conflicts.`, 'warning', () => {
+            handleConflicts(conflicts);
+        });
+    }
+    
+    // Handle conflicts
+    if (conflicts.length > 0) {
+        handleConflicts(conflicts);
+    }
+    
+    // Update UI
+    populateCategories();
+    updateQuoteCount();
+    lastSyncTimestamp = Date.now();
+    
+    if (newQuotesCount === 0 && updatedQuotesCount === 0) {
+        showNotification('No new updates from server.', 'info');
+    }
+}
+
+// Enhanced conflict handling with better UI
+function handleConflicts(conflicts) {
+    const conflictCount = conflicts.filter(c => !c.resolved).length;
+    
+    if (conflictCount > 0) {
+        // Create or update conflict notification
+        let conflictNotification = document.getElementById('conflict-notification');
+        
+        if (!conflictNotification) {
+            conflictNotification = document.createElement('div');
+            conflictNotification.id = 'conflict-notification';
+            conflictNotification.className = 'conflict-notification';
+            document.body.appendChild(conflictNotification);
+        }
+        
+        conflictNotification.innerHTML = `
+            <div class="conflict-alert">
+                <span>⚠️ ${conflictCount} data conflict(s) detected!</span>
+                <button onclick="showConflictResolution(${JSON.stringify(conflicts).replace(/"/g, '&quot;')})">
+                    Resolve Now
+                </button>
+                <button onclick="this.parentElement.style.display='none'">Dismiss</button>
+            </div>
+        `;
+        
+        // Also show a temporary notification
+        showNotification(
+            `${conflictCount} conflict(s) found between local and server data. Click to resolve.`,
+            'error',
+            () => showConflictResolution(conflicts)
+        );
+        
+        // Add conflict badge to UI
+        updateConflictBadge(conflictCount);
+    }
+}
+
+// Enhanced conflict resolution UI
+function showConflictResolution(conflicts) {
+    // Remove any existing modal
+    closeConflictModal();
+    
+    const modal = document.createElement('div');
+    modal.className = 'conflict-modal';
+    modal.innerHTML = `
+        <div class="conflict-content">
+            <h3>🔄 Data Synchronization Conflicts</h3>
+            <p>We found ${conflicts.length} differences between your local quotes and server data.</p>
+            <div class="conflict-list">
+                ${conflicts.map((conflict, index) => `
+                    <div class="conflict-item" id="conflict-${index}">
+                        <h4>Conflict #${index + 1}</h4>
+                        <div class="conflict-versions">
+                            <div class="conflict-local">
+                                <h5>Your Local Version:</h5>
+                                <p class="quote-text">"${conflict.local.text}"</p>
+                                <p class="quote-author">- ${conflict.local.author}</p>
+                                <p class="quote-meta">Category: ${conflict.local.category || 'None'} | Updated: ${new Date(conflict.local.timestamp).toLocaleString()}</p>
+                            </div>
+                            <div class="conflict-server">
+                                <h5>Server Version:</h5>
+                                <p class="quote-text">"${conflict.server.text}"</p>
+                                <p class="quote-author">- ${conflict.server.author}</p>
+                                <p class="quote-meta">Category: ${conflict.server.category || 'None'} | Updated: ${new Date(conflict.server.timestamp).toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div class="conflict-actions">
+                            <button onclick="resolveConflict(${index}, 'local')" class="btn-local">
+                                Keep My Version
+                            </button>
+                            <button onclick="resolveConflict(${index}, 'server')" class="btn-server">
+                                Use Server Version
+                            </button>
+                            <button onclick="resolveConflict(${index}, 'keep-both')" class="btn-both">
+                                Keep Both Quotes
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="conflict-modal-actions">
+                <button onclick="resolveAllConflicts('server')" class="btn-all-server">
+                    Use All Server Versions
+                </button>
+                <button onclick="resolveAllConflicts('local')" class="btn-all-local">
+                    Keep All My Versions
+                </button>
+                <button onclick="closeConflictModal()" class="btn-close">
+                    Close
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+    window.currentConflicts = conflicts;
+}
+
+// Add function to resolve all conflicts at once
+function resolveAllConflicts(resolution) {
+    window.currentConflicts.forEach((_, index) => {
+        resolveConflict(index, resolution);
+    });
+    showNotification(`All conflicts resolved using ${resolution} versions.`, 'success');
+    setTimeout(closeConflictModal, 1000);
+}
+
+// Add real-time update indicator
+function addUpdateIndicator() {
+    const indicator = document.createElement('div');
+    indicator.id = 'update-indicator';
+    indicator.className = 'update-indicator';
+    indicator.innerHTML = `
+        <span class="update-text">Last update: <span id="last-update-time">Just now</span></span>
+        <span class="update-status" id="update-status">🟢 Synced</span>
+    `;
+    
+    document.querySelector('.container').appendChild(indicator);
+    
+    // Update the indicator periodically
+    setInterval(() => {
+        const timeDiff = Date.now() - lastSyncTimestamp;
+        const minutes = Math.floor(timeDiff / 60000);
+        const statusElement = document.getElementById('update-status');
+        const timeElement = document.getElementById('last-update-time');
+        
+        if (minutes < 1) {
+            timeElement.textContent = 'Just now';
+            statusElement.textContent = '🟢 Synced';
+            statusElement.className = 'status-synced';
+        } else if (minutes < 5) {
+            timeElement.textContent = `${minutes} min ago`;
+            statusElement.textContent = '🟡 Recently';
+            statusElement.className = 'status-recent';
+        } else {
+            timeElement.textContent = `${minutes} min ago`;
+            statusElement.textContent = '🔴 Offline';
+            statusElement.className = 'status-offline';
+        }
+    }, 30000);
+}
+
+// Update the initApp function
+function initApp() {
+    loadQuotes();
+    addUpdateIndicator();
+    // ... rest of initialization
+}
+
+// Add CSS for the new UI elements
+const enhancedUICSS = `
+.conflict-notification {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #dc3545;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    z-index: 1002;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.conflict-alert {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.conflict-alert button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.conflict-alert button:first-child {
+    background: white;
+    color: #dc3545;
+}
+
+.conflict-alert button:last-child {
+    background: transparent;
+    color: white;
+    border: 1px solid white;
+}
+
+.update-indicator {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.status-synced { color: #28a745; }
+.status-recent { color: #ffc107; }
+.status-offline { color: #dc3545; }
+
+.conflict-versions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 15px 0;
+}
+
+.conflict-local, .conflict-server {
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.conflict-local {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+}
+
+.conflict-server {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.conflict-modal-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.btn-all-local { background: #28a745; color: white; }
+.btn-all-server { background: #dc3545; color: white; }
+.btn-close { background: #6c757d; color: white; }
+`;
+
+// Add the CSS to the document
+const enhancedStyle = document.createElement('style');
+enhancedStyle.textContent = enhancedUICSS;
+document.head.appendChild(enhancedStyle);
 // Load quotes from local storage when the page loads
 function loadQuotes() {
     const storedQuotes = localStorage.getItem('quotes');
