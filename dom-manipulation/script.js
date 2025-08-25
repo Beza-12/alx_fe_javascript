@@ -228,14 +228,24 @@ function manualSync() {
     showNotification('Manual sync started...', 'info');
 }
 
-// Update the startSyncInterval function
 function startSyncInterval() {
-    clearTimeout(syncTimeout);
-    syncTimeout = setTimeout(() => {
-        fetchQuotesFromServer();
-        syncToServer();
-        startSyncInterval();
+    // Clear any existing interval first
+    if (window.syncIntervalId) {
+        clearInterval(window.syncIntervalId);
+    }
+    
+    // Set up periodic sync using setInterval
+    window.syncIntervalId = setInterval(async () => {
+        try {
+            await fetchQuotesFromServer();
+            await syncQuotes();
+            console.log('Periodic sync completed at:', new Date().toLocaleTimeString());
+        } catch (error) {
+            console.warn('Periodic sync failed:', error);
+        }
     }, syncInterval);
+    
+    showNotification(`Auto-sync enabled (every ${syncInterval/1000} seconds)`, 'info');
 }
 // Export quotes to JSON file
 function exportToJson() {
