@@ -169,6 +169,29 @@
     </style>
 </head>
 <body>
+  <!-- Add this to your HTML file -->
+<div class="filter-container">
+    <label for="categoryFilter">Filter by Category:</label>
+    <select id="categoryFilter" onchange="filterQuotes()">
+        <option value="all">All Categories</option>
+        <!-- Categories will be populated dynamically -->
+    </select>
+</div>
+<!-- Category Filter -->
+<div class="filter-container">
+    <label for="categoryFilter">Filter by Category:</label>
+    <select id="categoryFilter">
+        <option value="all">All Categories</option>
+        <!-- Categories will be populated dynamically -->
+    </select>
+</div>
+
+<!-- Update your quote display to show category -->
+<div id="quote-display">
+    <p id="quote-text"></p>
+    <cite id="quote-author"></cite>
+    <small id="quote-category" style="display: none;"></small>
+</div>
     <div class="container">
         <h1>Dynamic Quote Generator</h1>
         
