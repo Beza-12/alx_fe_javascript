@@ -86,7 +86,7 @@ function addNewQuote() {
 }
 
 // Export quotes to JSON file
-function exportToJson() {
+function Export Quotes() {
     if (quotes.length === 0) {
         alert("No quotes to export!");
         return;
