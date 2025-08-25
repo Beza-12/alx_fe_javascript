@@ -1,6 +1,8 @@
 // Mock server URL (JSONPlaceholder simulation)
 const SERVER_URL = "https://jsonplaceholder.typicode.com/posts";
-
+let lastSyncTimestamp = 0;
+let syncInterval = 30000; // Sync every 30 seconds
+let syncTimeout;
 // DOM elements
 const quoteTextElement = document.getElementById('quote-text');
 const quoteAuthorElement = document.getElementById('quote-author');
@@ -15,6 +17,7 @@ const quoteCategoryElement = document.getElementById('quote-category');
 // Initialize quotes array and categories
 let quotes = [];
 let categories = [];
+let serverQuotes = [];
 
 // Load quotes from local storage when the page loads
 function loadQuotes() {
@@ -116,6 +119,64 @@ function addNewQuote() {
     alert("Quote added successfully!");
 }
 
+// Fetch quotes from server (renamed to match ALX requirement)
+async function fetchQuotesFromServer() {
+    try {
+        const response = await fetch(SERVER_URL);
+        if (!response.ok) throw new Error('Server fetch failed');
+        
+        const serverData = await response.json();
+        
+        // Extract quotes from server response (simulation)
+        const newServerQuotes = serverData.slice(0, 5).map((post, index) => ({
+            id: `server-${post.id}`,
+            text: post.title,
+            author: `User ${post.userId}`,
+            category: 'Server',
+            timestamp: Date.now() - (index * 1000),
+            source: 'server'
+        }));
+        
+        serverQuotes = newServerQuotes;
+        mergeServerData(newServerQuotes);
+        
+        return newServerQuotes;
+        
+    } catch (error) {
+        console.warn('Server fetch failed:', error);
+        showNotification('Could not connect to server. Working offline.', 'warning');
+        return [];
+    }
+}
+
+// Update the initServerSync function to use the correct function name
+function initServerSync() {
+    // Load initial server data
+    fetchQuotesFromServer();
+    
+    // Set up periodic sync
+    startSyncInterval();
+    
+    // Sync before page unload
+    window.addEventListener('beforeunload', syncToServer);
+}
+
+// Update the manualSync function
+function manualSync() {
+    fetchQuotesFromServer();
+    syncToServer();
+    showNotification('Manual sync started...', 'info');
+}
+
+// Update the startSyncInterval function
+function startSyncInterval() {
+    clearTimeout(syncTimeout);
+    syncTimeout = setTimeout(() => {
+        fetchQuotesFromServer();
+        syncToServer();
+        startSyncInterval();
+    }, syncInterval);
+}
 // Export quotes to JSON file
 function exportToJson() {
     const filteredQuotes = getFilteredQuotes();
